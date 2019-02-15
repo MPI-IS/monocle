@@ -55,6 +55,7 @@
                     <CheckBox x:Name="InfraredBox" IsChecked="True">Infrared</CheckBox>
                     <CheckBox x:Name="SkeletonBox" IsChecked="True">Skeleton</CheckBox>
                     <CheckBox x:Name="DepthMappingBox">DepthMapping</CheckBox>
+                    <CheckBox x:Name="BodyIndexBox" IsChecked="True">BodyIndex</CheckBox>
                     <Separator></Separator>
                     <Label>Capture Options</Label>
           <Label ToolTip="How many Buffers are used to cache the incoming frames before serializing" Content="Buffer size"/>
