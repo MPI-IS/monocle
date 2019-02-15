@@ -169,7 +169,8 @@ namespace Monocle
                                            DepthBox.IsChecked == true,
                                            InfraredBox.IsChecked == true,
                                            SkeletonBox.IsChecked == true,
-                                           DepthMappingBox.IsChecked == true);
+                                           DepthMappingBox.IsChecked == true,
+                                           BodyIndexBox.IsChecked == true);
                 _captureController.StartCapture(serializationFlags, nMemoryFrames, nFramesToCapture);
             }
             catch (Exception ex)
