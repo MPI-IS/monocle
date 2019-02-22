@@ -3,7 +3,6 @@ Monocle
 
 A simple data capture app using the Kinect, based on [Smithers][smithers].
 
-
 Features
 --------
 
@@ -11,19 +10,16 @@ Features
 - Capture a shot at the click of a button
 - Compress captured shots into a 7zip archive
 
-
 Installation
 ------------
 
 1. Install [Visual Studio 2017 Community Edition][vstudio].
 2. Install the [Kinect SDK][kinect].
-3. Clone the repository and update the submodule using the following command:
+3. Clone the repository, go to its root, and update the submodule using the following command:
     ```
     git submodule update --init --recursive
     ```
-4. Open and build the solution. The app will automatically install
-   all the remaining dependencies.
-
+4. Open Visual Studio and build the solution. The app will automatically install all the remaining dependencies.
 
 License
 -------
