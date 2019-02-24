@@ -18,8 +18,8 @@ using System.Windows.Shapes;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media.Animation;
 
-using Smithers.Reading.FrameData.Mock;
 using Smithers.Sessions;
+using System.Threading;
 
 namespace Monocle
 {
@@ -37,10 +37,14 @@ namespace Monocle
         private KinectSensor _sensor;
 
         private object _lockObject = new object();
-
-        private System.Timers.Timer _fakeKinectDataTimer;
-        private MockLiveFrame _fakeLiveFrame = MockLiveFrame.GetFakeLiveFrame();
         private int _framesToCapture;
+
+
+        /// <summary>
+        /// Fired when the size of the buffer is changed
+        /// </summary>
+        public event EventHandler<Int64> changeMemoryManagerCapacity;
+
 
         public MainWindow()
         {
@@ -55,47 +59,83 @@ namespace Monocle
 
             _cameraImagePresenter = new CameraImagePresenter(camera, cameraDummpy);
             _cameraImagePresenter.CameraMode = CameraMode.Color;
-            _cameraImagePresenter.Enabled = true;
+            _cameraImagePresenter.SparseUpdate = false;
+            compressButton.IsEnabled = false;
             //camera.Source = _captureController.ColorBitmap.Bitmap;
 
             _captureController.SessionManager.ShotBeginning += (sender, e) =>
             {
+              this.Dispatcher.Invoke((Action)(() =>
+              {
+
                 _flashAttack.Begin();
-                _cameraImagePresenter.Enabled = false;
+                _cameraImagePresenter.SparseUpdate = true;
+                captureControlPanel.IsEnabled = false;
+                captureButton.IsEnabled = false;
+                compressButton.IsEnabled = false;
+              }));
             };
 
             _captureController.SessionManager.ShotCompletedSuccess += (sender, e) =>
             {
-                _cameraImagePresenter.Enabled = true;
+              this.Dispatcher.Invoke((Action)(() =>
+              {
+                _cameraImagePresenter.SparseUpdate = false;
+                captureControlPanel.IsEnabled = true;
+                captureButton.IsEnabled = true;
+                compressButton.IsEnabled = false;
+              }));
             };
 
             _captureController.SessionManager.ShotCompletedError += (sender, e) =>
             {
+              this.Dispatcher.Invoke((Action)(() =>
+              {
                 _flashDecay.Begin();
                 MessageBox.Show(e.ErrorMessage);
-                _cameraImagePresenter.Enabled = true;
+                _cameraImagePresenter.SparseUpdate = false;
+                captureButton.IsEnabled = true;
+                compressButton.IsEnabled = false;// true;
+              }));
             };
 
             _captureController.SessionManager.ShotSavedSuccess += (sender, e) =>
             {
-                lock (_lockObject)
-                {
-                // TODO: check if this works on the real kinect, it crashes with the fake setup
-                    if (checkBox.IsChecked != true)
-                    {
-                        _flashDecay.Begin();
-                        lblCaptureCount.Content = _captureController.Session.Shots.Where(x => x.Completed).Count();
-                    }
-                }
+              this.Dispatcher.Invoke((Action)(() =>
+              {
+
+                _flashDecay.Begin();
+                lblCaptureCount.Content = _captureController.Session.Shots.Where(x => x.Completed).Count();
+              }));
             };
 
             _captureController.SessionManager.ShotSavedError += (sender, e) =>
             {
+              this.Dispatcher.Invoke((Action)(() =>
+              {
+
                 _flashDecay.Begin();
                 if (e.Exception == null)
-                    MessageBox.Show(e.ErrorMessage);
+                  MessageBox.Show(e.ErrorMessage);
                 else
-                    MessageBox.Show(e.ErrorMessage + ": " + e.Exception.Message);
+                  MessageBox.Show(e.ErrorMessage + ": " + e.Exception.Message);
+              }));
+            };
+
+            _captureController.SessionManager.updateGUI += (sender, e) =>
+            {
+                // NOTE: This has to be invoked from the Main Thread or you get an access violation
+                //       I don´t know why the other events do not seem to need this.
+                this.Dispatcher.Invoke((Action)(() =>
+                {
+                    averageFPSLabel.Content = String.Format("{0:0.#}", e.AverageFPS);
+                    minFPSLabel.Content = String.Format("{0:0.#}", e.MinFPS);
+                    maxTimeDeltaLabel.Content = String.Format("{0:0.#}", e.MaxTimeDeleta);
+                    percentage_buffer.Content = String.Format("{0:0.00}", e.PercentageBuffer);
+                    capture_status.Content = String.Format("{0:0.00}", e.Blabla);
+                    
+                }));
+                
             };
 
             _captureController.SkeletonPresenter = new SkeletonPresenter(canvas);
@@ -106,6 +146,7 @@ namespace Monocle
 
             _captureController.SkeletonPresenter.CoordinateMapper = KinectSensor.GetDefault().CoordinateMapper;
             _captureController.SkeletonPresenter.Underlay = camera;
+          
 
             _captureController.FrameReader.AddResponder(_cameraImagePresenter);
 
@@ -113,25 +154,10 @@ namespace Monocle
             _flashDecay = FindResource("FlashDecay") as Storyboard;
 
 
-
-            // Timer that fires every 33ms (~30 fps). When the timer fires, the SessionManager receives
-            // a FrameArrived Event just like he would from the real Kinect.
-            // The timer is only enabled if the "Send Fake Kinect Data" Checkbox is toggled.
-            _fakeKinectDataTimer = new System.Timers.Timer(33);
-            _fakeKinectDataTimer.Elapsed += new System.Timers.ElapsedEventHandler(onTimerElapsed);
-
         }
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            if (checkBox.IsChecked == true)
-            {
-                if (!_fakeKinectDataTimer.Enabled)
-                {
-                    _fakeKinectDataTimer.Enabled = true;
-                }
-            }
-            
             try
             {
                 int nFramesToCapture = Convert.ToInt32(nFramesToCaptureText.Text);
@@ -143,7 +169,8 @@ namespace Monocle
                                            DepthBox.IsChecked == true,
                                            InfraredBox.IsChecked == true,
                                            SkeletonBox.IsChecked == true,
-                                           DepthMappingBox.IsChecked == true);
+                                           DepthMappingBox.IsChecked == true,
+                                           BodyIndexBox.IsChecked == true);
                 _captureController.StartCapture(serializationFlags, nMemoryFrames, nFramesToCapture);
             }
             catch (Exception ex)
@@ -163,16 +190,13 @@ namespace Monocle
              
         }
 
+      
         private void Stop_Click(object sender, RoutedEventArgs e)
         {
-            _captureController.StopCapture();
+          new Thread(() => { _captureController.StopCapture(); }).Start();
+          
         }
 
-        private void onTimerElapsed(object source, System.Timers.ElapsedEventArgs e)
-        {
-           //  Console.WriteLine("The Elapsed event was raised at {0}", e.SignalTime);
-            this._captureController.SessionManager.FrameArrived(_fakeLiveFrame);
-        }
 
         private void ToggleCamera_Click(object sender, RoutedEventArgs e)
         {
@@ -211,6 +235,23 @@ namespace Monocle
                 lblCaptureCount.Content = "Compressed successfully";
             else
                 lblCaptureCount.Content = string.Format("Archive failed: {0}", result.Exception.Message);
+        }
+
+        private void nMemoryFramesText_TextChanged(object sender, TextChangedEventArgs e)
+        {
+          if (_captureController == null)
+            return;
+
+          int nMemoryFrames = Convert.ToInt32(nMemoryFramesText.Text); 
+          // not doing errors
+          if(nMemoryFrames > 10000)
+          {
+            return;
+          }
+
+          _captureController.SetBufferSize(nMemoryFrames);
+
+
         }
 
     }
